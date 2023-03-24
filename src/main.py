@@ -8,12 +8,11 @@ from aiogram import executor
 from dotenv import load_dotenv
 from loguru import logger
 
-from src.config import PATH_TO_STORY, SAVE_HISTORY, BOT_TOKEN, SYSTEM_MESSAGE, MAX_CONTEXT, MAX_TOKENS, RENDER_DELAY
+from src.config import PATH_TO_STORY, SAVE_HISTORY, BOT_TOKEN, SYSTEM_MESSAGE, MAX_CONTEXT, MAX_TOKENS, RENDER_DELAY, WHITE_LIST
 from src.lib import read_json, write_json
 
 load_dotenv()
 
-# Создать Telegram бота
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 logging.basicConfig(level=logging.INFO)
@@ -21,9 +20,12 @@ logging.basicConfig(level=logging.INFO)
 logger.info("Starting Bot...")
 
 
-# Декоратор для доступа пользователя к боту
 def access(func):
     async def wrapper(message: types.Message):
+        if WHITE_LIST == "True":
+            await func(message)
+            return
+
         json_data = read_json("settings.json")
         if json_data["work"] is False:
             return
@@ -33,6 +35,7 @@ def access(func):
 
         ids = json_data["users"]
         admin_users = json_data["admin_users"]
+
 
         if user_id not in ids:
             for admin_user in admin_users:
@@ -44,11 +47,9 @@ def access(func):
     return wrapper
 
 
-# Функция для обработки сообщения от пользователя
 @dp.message_handler(commands=['ai'])
 @access
 async def handle_message(message: types.Message):
-    # Получить идентификатор пользователя и текст сообщения
     user_id = message.from_user.id
     user_message = message.text[4:].strip()
     if user_message == "":
@@ -58,7 +59,6 @@ async def handle_message(message: types.Message):
     logger.info(f"User {user_id} send message: {user_message}")
 
     if SAVE_HISTORY:
-        # Получить историю сообщений пользователя
         user_history = []
         try:
             with open(f"{PATH_TO_STORY}{user_id}.json", "r") as f:
@@ -71,16 +71,13 @@ async def handle_message(message: types.Message):
                                    "История переполнена, начните новую тему! Чтобы очистить историю напишите /clear")
             return
 
-        # Добавить новое сообщение в историю пользователя
         user_history.append({"role": "user", "content": user_message})
 
-        # Сохранить историю сообщений пользователя
         with open(f"{PATH_TO_STORY}{user_id}.json", "w") as f:
             json.dump(user_history, f)
     else:
         user_history = [{"role": "user", "content": user_message}]
 
-    # Отправить сообщение на обработку в OpenAI API
     user_history.append({"role": "system", "content": SYSTEM_MESSAGE})
 
     completions = openai.ChatCompletion.create(
@@ -104,41 +101,35 @@ async def handle_message(message: types.Message):
             continue
 
     if SAVE_HISTORY:
-        # Добавить новое сообщение от бота в историю пользователя
         user_history.append({"role": "assistant", "content": out_text})
 
-        # Сохранить обновленную историю сообщений пользователя
         with open(f"{PATH_TO_STORY}{user_id}.json", "w") as f:
             json.dump(user_history, f)
 
         await bot_mess.edit_text(out_text + f"\n{count_assistant_history}/8")
 
 
-# Добавить обработчик команды /start
 @dp.message_handler(commands=['start'])
 @access
 async def start_command(message: types.Message):
     user_id = message.from_user.id
-    await bot.send_message(user_id, "Привет! Я бот-консультант Ai Odyssey.")
+    await bot.send_message(user_id, "Hi! I am a bot that can answer any of your questions and perform tasks of varying complexity.")
 
 
-# Добавить обработчик команды /history
 @dp.message_handler(commands=['history'])
 async def history_command(message: types.Message):
     user_id = message.from_user.id
 
-    # Получить историю сообщений пользователя
     try:
         with open(f"{PATH_TO_STORY}{user_id}.json", "r") as f:
             user_history = json.load(f)
-        # удаление из истории сообщений сообщения от system
         user_history = [message for message in user_history if message['role'] != 'system']
 
         history_message = "".join([f"{message['role']}: {message['content']} \n\n" for message in user_history])
         await bot.send_message(user_id, history_message)
 
     except FileNotFoundError:
-        await bot.send_message(user_id, "История сообщений не найдена.")
+        await bot.send_message(user_id, "Message history not found.")
         return
 
 
@@ -147,15 +138,14 @@ async def history_command(message: types.Message):
 async def clear_command(message: types.Message):
     user_id = message.from_user.id
 
-    # Удалить историю сообщений пользователя
     try:
         os.remove(f"{PATH_TO_STORY}{user_id}.json")
-        await bot.send_message(user_id, "История сообщений удалена.")
+        await bot.send_message(user_id, "The message history has been deleted.")
     except FileNotFoundError:
-        await bot.send_message(user_id, "История сообщений не найдена.")
+        await bot.send_message(user_id, "Message history not found.")
         return
     except Exception as e:
-        await bot.send_message(user_id, f"Ошибка: {e}")
+        logger.error(e)
         return
 
 
@@ -166,19 +156,19 @@ async def add_user_command(message: types.Message):
     user_id = message.from_user.id
     admin_ids = json_data["admin_users"]
     if user_id not in admin_ids:
-        await bot.send_message(user_id, "У вас нет прав для выполнения этой команды.")
+        await bot.send_message(user_id, "You don't have the rights to execute this command.")
         return
 
     text = message.text
     add_user_id = int(text.split(" ")[1])
     if add_user_id in json_data["users"]:
-        await bot.send_message(user_id, "Пользователь уже добавлен.")
+        await bot.send_message(user_id, "The user has already been added.")
         return
     ids = json_data["users"]
     ids.append(add_user_id)
     work = json_data["work"]
     write_json("settings.json", {"users": ids, "admin_users": admin_ids, "work": work})
-    await bot.send_message(user_id, "Пользователь добавлен.")
+    await bot.send_message(user_id, "The user has been added.")
 
 
 @dp.message_handler(commands=['off_bot'])
@@ -188,13 +178,13 @@ async def off_bot_command(message: types.Message):
     user_id = message.from_user.id
     admin_ids = json_data["admin_users"]
     if user_id not in admin_ids:
-        await bot.send_message(user_id, "У вас нет прав для выполнения этой команды.")
+        await bot.send_message(user_id, "You don't have the rights to execute this command.")
         return
 
     json_data["work"] = False
     write_json("settings.json", json_data)
 
-    await bot.send_message(user_id, "Бот отключен.")
+    await bot.send_message(user_id, "The bot is disabled.")
 
 
 @dp.message_handler(commands=['on_bot'])
@@ -203,42 +193,39 @@ async def on_bot_command(message: types.Message):
     user_id = message.from_user.id
     admin_ids = json_data["admin_users"]
     if user_id not in admin_ids:
-        await bot.send_message(user_id, "У вас нет прав для выполнения этой команды.")
+        await bot.send_message(user_id, "You don't have the rights to execute this command.")
         return
 
     json_data["work"] = True
     write_json("settings.json", json_data)
 
-    await bot.send_message(user_id, "Бот включен.")
+    await bot.send_message(user_id, "The bot is enabled.")
 
 
 @dp.message_handler(commands=['help'])
 async def help_command(message: types.Message):
     user_id = message.from_user.id
-    await bot.send_message(user_id, "Список доступных команд:\n\n"
-                                    "/start - начать диалог\n"
-                                    "/history - просмотреть историю сообщений\n"
-                                    "/clear - очистить историю сообщений\n"
-                                    "/id - получить id пользователя\n"
-                                    "/help - получить список команд")
+    await bot.send_message(user_id, "List of available commands:\n\n"
+                                    "/start - start dialog\n"
+                                    "/history - view message history\n"
+                                    "/clear - clear message history\n"
+                                    "/id - get user id\n"
+                                    "/help - get a list of commands")
 
 
 @dp.message_handler(commands=['id'])
 async def id_command(message: types.Message):
     user_id = message.from_user.id
-    await bot.send_message(user_id, f"Ваш id: {user_id}")
+    await bot.send_message(user_id, f"Your id: {user_id}")
 
 
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 
 
 async def on_startup(dp):
-    # Установить вебхук
     await bot.set_webhook(WEBHOOK_URL)
 
-
 async def on_shutdown(dp):
-    # Удалить вебхук
     await bot.delete_webhook()
 
 

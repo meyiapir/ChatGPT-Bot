@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Установить ключ API OpenAI
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
