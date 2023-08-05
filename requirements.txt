@@ -1,0 +1,5 @@
+openai==0.27.8
+aiogram==2.25.1
+
+python-dotenv==1.0.0
+loguru==0.7.0
