@@ -4,6 +4,7 @@ import os
 import openai
 from aiogram import types
 from dotenv import load_dotenv
+
 from src.config import WHITE_LIST
 
 load_dotenv()

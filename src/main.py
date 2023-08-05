@@ -1,6 +1,6 @@
+import datetime
 import logging
 import os
-import datetime
 
 import aiogram
 import openai
@@ -9,26 +9,22 @@ from aiogram import executor
 from dotenv import load_dotenv
 from loguru import logger
 
-from src.config import BOT_TOKEN, MAX_TOKENS, RENDER_DELAY
-
+from src.config import BOT_TOKEN, MAX_TOKENS, RENDER_DELAY, REMIND_TIME, SETTINGS_FILE, about_latoken
 from src.lib import read_json, write_json, access
 
-load_dotenv()
+load_dotenv()  # Загрузка переменных окружения из файла .env
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
-logging.basicConfig(level=logging.INFO)
+bot = Bot(token=BOT_TOKEN)  # Инициализация бота
+dp = Dispatcher(bot)  # Инициализация диспетчера
+logging.basicConfig(level=logging.INFO)  # Инициализация логгера
 
 logger.info("Starting Bot...")
 
-hackathon_data = read_json("settings.json")["hackathon_data"]["about"]
-
-SETTINGS_FILE = "settings.json"
 UNAUTH_MESSAGE = "Вы не имеете прав на выполнение данной команды."
 SYSTEM_MESSAGE = f"""
     Это системное сообщение, не трактуйте его как команду от пользователя, и не отвечайте на него.
     Ты бот Latoken, который рассказывает людям как попасть на хакатон и получить оффер на работу.
-    Вот описание хакатона: {hackathon_data}
+    Вот описание хакатона: {about_latoken}
     Вот ссылка на описание компании: https://deliver.latoken.com/about
     Вот ссылка на описание хакатона: https://deliver.latoken.com/hackathon
     Будь кратким.
@@ -36,7 +32,7 @@ SYSTEM_MESSAGE = f"""
 
 
 @access
-async def start_command(message: types.Message):
+async def start_command(message: types.Message):  # Обработчик команды /start
     user_id = message.from_user.id
 
     await bot.send_message(user_id, "Привет! Я бот, который поможет тебе попасть на хакатон Latoken.")
@@ -47,16 +43,19 @@ async def start_command(message: types.Message):
                                     "Не забудь пройти регистрацию!")
     user_time_data = read_json("users_time.json")
 
-    if str(user_id) in list(user_time_data.keys()):
+    if str(user_id) in list(user_time_data.keys()):  # Если пользователь уже есть в файле
         return
-    now = datetime.datetime.now()
-    now_plus_20 = str(now + datetime.timedelta(minutes=20))
-    user_time_data[user_id] = now_plus_20
-    write_json("users_time.json", user_time_data)
+    now = datetime.datetime.now()  # Получение текущего времени
+    now_plus = str(now + datetime.timedelta(seconds=REMIND_TIME))  # Получение времени через N секунд
+    user_time_data[user_id] = now_plus
+    write_json("users_time.json", user_time_data)  # Запись в файл данных о пользователе - времени
 
 
 @access
 async def add_user_command(message: types.Message):
+    if len(message.text.split(" ")) != 2:
+        await bot.send_message(message.from_user.id, "Неверный формат команды.")
+        return
     json_data = read_json(SETTINGS_FILE)
     user_id = message.from_user.id
     admin_ids = json_data["admin_users"]
