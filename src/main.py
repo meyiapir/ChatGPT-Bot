@@ -1,6 +1,6 @@
-import json
 import logging
 import os
+import datetime
 
 import aiogram
 import openai
@@ -38,15 +38,21 @@ SYSTEM_MESSAGE = f"""
 @access
 async def start_command(message: types.Message):
     user_id = message.from_user.id
-    # Клавиатура под сообщением
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(types.KeyboardButton(text="Подать заявку на хакатон"))
+
     await bot.send_message(user_id, "Привет! Я бот, который поможет тебе попасть на хакатон Latoken.")
     await bot.send_message(user_id, "Вот тут можешь узнать подробнее о нашей компании: "
                                     "https://deliver.latoken.com/about\n"
                                     "А вот тут о хакатоне: https://deliver.latoken.com/hackathon\n"
-                                    "Если остались вопросы - задавай их тут, я постараюсь ответить на них.",
-                           reply_markup=keyboard)
+                                    "Если остались вопросы - задавай их тут, я постараюсь ответить на них.\n"
+                                    "Не забудь пройти регистрацию!")
+    user_time_data = read_json("users_time.json")
+
+    if str(user_id) in list(user_time_data.keys()):
+        return
+    now = datetime.datetime.now()
+    now_plus_20 = str(now + datetime.timedelta(minutes=20))
+    user_time_data[user_id] = now_plus_20
+    write_json("users_time.json", user_time_data)
 
 
 @access
@@ -136,6 +142,9 @@ async def handle_message(message: types.Message):
                 await bot_mess.edit_text(out_text)
             count += 1
         except KeyError:
+            continue
+        except Exception as e:
+            logger.error(e)
             continue
     try:
         await bot_mess.edit_text(out_text)

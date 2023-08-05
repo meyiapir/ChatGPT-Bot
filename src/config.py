@@ -7,6 +7,6 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 MAX_TOKENS = 1024
-RENDER_DELAY = 10
+RENDER_DELAY = 5
 WHITE_LIST = os.getenv("WHITE_LIST")
 
